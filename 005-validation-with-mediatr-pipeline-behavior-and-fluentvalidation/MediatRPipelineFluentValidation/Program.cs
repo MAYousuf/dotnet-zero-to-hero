@@ -9,6 +9,8 @@ using MediatRPipelineFluentValidation.Features.Products.Queries.Get;
 using MediatRPipelineFluentValidation.Features.Products.Queries.List;
 using MediatRPipelineFluentValidation.Persistence;
 using System.Reflection;
+using FluentResults;
+using Microsoft.AspNetCore.Http.Features;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
@@ -22,8 +24,21 @@ builder.Services.AddMediatR(cfg =>
     cfg.AddOpenBehavior(typeof(ValidationBehavior<,>));
 });
 
+//builder.Services.AddScoped(typeof(IPipelineBehavior<CreateProductCommand, Result<Guid>>), typeof(ValidationBehavior<CreateProductCommand, Guid>));
+
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
-builder.Services.AddProblemDetails();
+builder.Services.AddProblemDetails(options =>
+{
+    options.CustomizeProblemDetails = context =>
+    {
+        context.ProblemDetails.Instance =
+            $"{context.HttpContext.Request.Method} {context.HttpContext.Request.Path}";
+
+        context.ProblemDetails.Extensions.TryAdd("requestId", context.HttpContext.TraceIdentifier);
+        var activity = context.HttpContext.Features.Get<IHttpActivityFeature>()?.Activity;
+        context.ProblemDetails.Extensions.TryAdd("traceId", activity?.Id);
+    };
+});
 
 var app = builder.Build();
 app.UseExceptionHandler();
@@ -48,10 +63,25 @@ app.MapGet("/products", async (ISender mediatr) =>
 
 app.MapPost("/products", async (CreateProductCommand command, IMediator mediatr) =>
 {
-    var productId = await mediatr.Send(command);
-    if (Guid.Empty == productId) return Results.BadRequest();
-    await mediatr.Publish(new ProductCreatedNotification(productId));
-    return Results.Created($"/products/{productId}", new { id = productId });
+    // var productId = await mediatr.Send(command);
+    // if (Guid.Empty == productId) return Results.BadRequest();
+
+    var result = await mediatr.Send(command);
+    if (result.IsFailed) return Results.BadRequest(result.Reasons);
+
+    await mediatr.Publish(new ProductCreatedNotification(result.Value));
+    return Results.Created($"/products/{result.Value}", new { id = result.Value });
+
+    // result switch
+    // {
+    //     { IsSuccess: true } => throw new InvalidOperationException(),
+    //     _ => BadRequest(
+    //         CreateProblemDetails(
+    //             "Validation Error",
+    //             StatusCodes.Status400BadRequest,
+    //             result.Reasons))
+    // }
+
 });
 
 app.MapDelete("/products/{id:guid}", async (Guid id, ISender mediatr) =>
