@@ -20,11 +20,11 @@ builder.Services.AddValidatorsFromAssembly(Assembly.GetExecutingAssembly());
 builder.Services.AddMediatR(cfg =>
 {
     cfg.RegisterServicesFromAssembly(Assembly.GetExecutingAssembly());
-    cfg.AddOpenBehavior(typeof(RequestResponseLoggingBehavior<,>));
-    cfg.AddOpenBehavior(typeof(ValidationBehavior<,>));
+    //cfg.AddOpenBehavior(typeof(RequestResponseLoggingBehavior<,>));
+    //cfg.AddOpenBehavior(typeof(ValidationBehavior<,>));
 });
 
-//builder.Services.AddScoped(typeof(IPipelineBehavior<CreateProductCommand, Result<Guid>>), typeof(ValidationBehavior<CreateProductCommand, Guid>));
+builder.Services.AddScoped(typeof(IPipelineBehavior<CreateProductCommand, Result<Guid>>), typeof(ValidationBehavior<CreateProductCommand, Guid>));
 
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails(options =>
