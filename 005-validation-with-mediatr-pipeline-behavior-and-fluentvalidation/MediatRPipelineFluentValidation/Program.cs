@@ -9,7 +9,7 @@ using MediatRPipelineFluentValidation.Features.Products.Queries.Get;
 using MediatRPipelineFluentValidation.Features.Products.Queries.List;
 using MediatRPipelineFluentValidation.Persistence;
 using System.Reflection;
-using FluentResults;
+using Ardalis.Result.AspNetCore;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 
@@ -71,26 +71,22 @@ app.MapPost("/products", async (CreateProductCommand command, IMediator mediatr)
     // if (Guid.Empty == productId) return Results.BadRequest();
 
     var result = await mediatr.Send(command);
-    if (result.IsFailed)
+    if (!result.IsSuccess)
     {
-        return Results.BadRequest(
-            CreateProblemDetails(
-                "Validation Error",
-                StatusCodes.Status400BadRequest,
-                result.Reasons));
+        return result.ToMinimalApiResult();
 
-        ProblemDetails CreateProblemDetails(
-            string title,
-            int status,
-            List<IReason> reasons) =>
-            new()
-            {
-                Title = title,
-                Status = status,
-                Type = string.Empty,
-                Detail = string.Empty,
-                Extensions = { { nameof(reasons), reasons } }
-            };
+        // ProblemDetails CreateProblemDetails(
+        //     string title,
+        //     int status,
+        //     List<IReason> reasons) =>
+        //     new()
+        //     {
+        //         Title = title,
+        //         Status = status,
+        //         Type = string.Empty,
+        //         Detail = string.Empty,
+        //         Extensions = { { nameof(reasons), reasons } }
+        //     };
     }
 
 
