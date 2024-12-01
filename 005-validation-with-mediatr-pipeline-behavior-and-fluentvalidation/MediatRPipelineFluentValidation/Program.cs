@@ -11,6 +11,7 @@ using MediatRPipelineFluentValidation.Persistence;
 using System.Reflection;
 using FluentResults;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Mvc;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
@@ -21,10 +22,13 @@ builder.Services.AddMediatR(cfg =>
 {
     cfg.RegisterServicesFromAssembly(Assembly.GetExecutingAssembly());
     //cfg.AddOpenBehavior(typeof(RequestResponseLoggingBehavior<,>));
-    //cfg.AddOpenBehavior(typeof(ValidationBehavior<,>));
+    cfg.AddOpenBehavior(typeof(ValidationBehavior<,>));
+    
 });
 
-builder.Services.AddScoped(typeof(IPipelineBehavior<CreateProductCommand, Result<Guid>>), typeof(ValidationBehavior<CreateProductCommand, Guid>));
+//builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
+
+//builder.Services.AddScoped(typeof(IPipelineBehavior<CreateProductCommand, Result<Guid>>), typeof(ValidationBehavior<CreateProductCommand, Guid>));
 
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails(options =>
@@ -67,7 +71,28 @@ app.MapPost("/products", async (CreateProductCommand command, IMediator mediatr)
     // if (Guid.Empty == productId) return Results.BadRequest();
 
     var result = await mediatr.Send(command);
-    if (result.IsFailed) return Results.BadRequest(result.Reasons);
+    if (result.IsFailed)
+    {
+        return Results.BadRequest(
+            CreateProblemDetails(
+                "Validation Error",
+                StatusCodes.Status400BadRequest,
+                result.Reasons));
+
+        ProblemDetails CreateProblemDetails(
+            string title,
+            int status,
+            List<IReason> reasons) =>
+            new()
+            {
+                Title = title,
+                Status = status,
+                Type = string.Empty,
+                Detail = string.Empty,
+                Extensions = { { nameof(reasons), reasons } }
+            };
+    }
+
 
     await mediatr.Publish(new ProductCreatedNotification(result.Value));
     return Results.Created($"/products/{result.Value}", new { id = result.Value });
@@ -92,3 +117,6 @@ app.MapDelete("/products/{id:guid}", async (Guid id, ISender mediatr) =>
 
 app.UseHttpsRedirection();
 app.Run();
+
+  
+
