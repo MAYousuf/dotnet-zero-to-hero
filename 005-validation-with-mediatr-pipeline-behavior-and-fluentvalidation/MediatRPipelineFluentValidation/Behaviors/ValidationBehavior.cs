@@ -20,58 +20,50 @@ public class ValidationBehavior<TRequest, TResponse>(IEnumerable<IValidator<TReq
 
         if (validators.Any())
         {
+            // var context = new ValidationContext<TRequest>(request);
+            //
+            // var validationResults = await Task.WhenAll(
+            //     validators.Select(v =>
+            //         v.ValidateAsync(context, cancellationToken))).ConfigureAwait(false);
+            // var resultErrors = validationResults.SelectMany(r => r.AsErrors()).ToList();
+            //
+            //
+            //
+            // var failures = validators
+            //     .Select(v => v.Validate(context))
+            //     .SelectMany(validationResult => validationResult.Errors)
+            //     .Where(f => f != null)
+            //     .ToList();
+
             var context = new ValidationContext<TRequest>(request);
 
-            var validationResults = await Task.WhenAll(
-                validators.Select(v =>
-                    v.ValidateAsync(context, cancellationToken))).ConfigureAwait(false);
+            var validationResults = await Task.WhenAll(validators.Select(v => v.ValidateAsync(context, cancellationToken)));
             var resultErrors = validationResults.SelectMany(r => r.AsErrors()).ToList();
+            var failures = validationResults.SelectMany(r => r.Errors).Where(f => f != null).ToList();
 
-            // var errorsDictionary = validationResults
-            //     .SelectMany(x => x.Errors)
-            //     .Where(x => x != null)
-            //     .GroupBy(
-            //         x => x.PropertyName,
-            //         x => x.ErrorMessage,
-            //         (propertyName, errorMessages) => new
-            //         {
-            //             Key = propertyName,
-            //             Values = errorMessages.Distinct().ToArray()
-            //         })
-            //     .ToDictionary(x => x.Key, x => x.Values);
-            //var error2 = new Error("Validation Error").Metadata;
 
-            var failures = validators
-                .Select(v => v.Validate(context))
-                .SelectMany(validationResult => validationResult.Errors)
-                .Where(f => f != null)
-                .ToList();
-
-            //return Result.Fail("").WithErrors(failures);
-            // var errors = failures
-            //     .Where(validationFailure => validationFailure is not null)
-            //     .Select(failure => new Error(failure.ErrorMessage))
-            //     .Distinct()
-            //     .ToArray();
-
-            // if (errors.Any())
-            // {
-            //     var result = new TResponse();
-            //
-            //     foreach (var error in errors)
-            //         result.Reasons.Add(error);
-            //
-            //     return result;
-            // }
             if (failures.Count > 0)
             {
-                var responseType = typeof(TResponse);
-                //var result = new TResponse();
-                //return (TResponse)Result.Invalid(resultErrors);
-                //var result   = Activator.CreateInstance(responseType, null) as TResponse;
-                
-                //return result;
-                return (TResponse)(object)Result.Invalid(resultErrors);
+                if (typeof(TResponse).IsGenericType && typeof(TResponse).GetGenericTypeDefinition() == typeof(Result<>))
+                {
+                    var resultType = typeof(TResponse).GetGenericArguments()[0];
+                    var invalidMethod = typeof(Result<>)
+                        .MakeGenericType(resultType)
+                        .GetMethod(nameof(Result<int>.Invalid), new[] { typeof(List<ValidationError>) });
+
+                    if (invalidMethod != null)
+                    {
+                        return (TResponse)invalidMethod.Invoke(null, new object[] { resultErrors });
+                    }
+                }
+                else if (typeof(TResponse) == typeof(Result))
+                {
+                    return (TResponse)(object)Result.Invalid(resultErrors);
+                }
+                else
+                {
+                    throw new ValidationException(failures);
+                }
             }
 
             //return await next().ConfigureAwait(false);
