@@ -9,8 +9,7 @@ using MediatRPipelineFluentValidation.Features.Products.Queries.Get;
 using MediatRPipelineFluentValidation.Features.Products.Queries.List;
 using MediatRPipelineFluentValidation.Persistence;
 using System.Reflection;
-using Ardalis.Result;
-using Ardalis.Result.AspNetCore;
+using MediatRPipelineFluentValidation;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 
@@ -71,43 +70,44 @@ app.MapPost("/products", async (CreateProductCommand command, IMediator mediatr)
     // if (Guid.Empty == productId) return Results.BadRequest();
 
     var result = await mediatr.Send(command);
-    if (!result.IsSuccess)
-    {
-        if (result.Status == ResultStatus.Invalid) //result.ToMinimalApiResult();
-            return Results.BadRequest(CreateProblemDetails("Validation Error", StatusCodes.Status400BadRequest,
-                CreateErrorsDictionary(result.ValidationErrors)));
-
-        ProblemDetails CreateProblemDetails(
-            string title,
-            int status,
-            Dictionary<string, string[]> errors) =>
-            new()
-            {
-                Title = title,
-                Status = status,
-                Type = string.Empty,
-                Detail = string.Empty,
-                Extensions = { { nameof(errors), errors } }
-            };
-
-        Dictionary<string, string[]> CreateErrorsDictionary(IEnumerable<ValidationError> errors) =>
-            errors
-                // .SelectMany(x => x.Errors)
-                // .Where(x => x != null)
-                .GroupBy(
-                    x => x.Identifier,
-                    x => x.ErrorMessage,
-                    (propertyName, errorMessages) => new
-                    {
-                        Key = propertyName,
-                        Values = errorMessages.Distinct().ToArray()
-                    })
-                .ToDictionary(x => x.Key, x => x.Values);
-    }
+    // if (!result.IsSuccess)
+    // {
+    //     if (result.Status == ResultStatus.Invalid) //result.ToMinimalApiResult();
+    //         return Results.BadRequest(CreateProblemDetails("Validation Error", StatusCodes.Status400BadRequest,
+    //             CreateErrorsDictionary(result.ValidationErrors)));
+    //
+    //     ProblemDetails CreateProblemDetails(
+    //         string title,
+    //         int status,
+    //         Dictionary<string, string[]> errors) =>
+    //         new()
+    //         {
+    //             Title = title,
+    //             Status = status,
+    //             Type = string.Empty,
+    //             Detail = string.Empty,
+    //             Extensions = { { nameof(errors), errors } }
+    //         };
+    //
+    //     Dictionary<string, string[]> CreateErrorsDictionary(IEnumerable<ValidationError> errors) =>
+    //         errors
+    //             // .SelectMany(x => x.Errors)
+    //             // .Where(x => x != null)
+    //             .GroupBy(
+    //                 x => x.Identifier,
+    //                 x => x.ErrorMessage,
+    //                 (propertyName, errorMessages) => new
+    //                 {
+    //                     Key = propertyName,
+    //                     Values = errorMessages.Distinct().ToArray()
+    //                 })
+    //             .ToDictionary(x => x.Key, x => x.Values);
+    // }
 
 
     // await mediatr.Publish(new ProductCreatedNotification(result.Value));
-    return Results.Created($"/products/{result.Value}", new { id = result.Value });
+    return result.Match(Results.Ok, CustomResults.Problem);
+        return Results.Created($"/products/{result.Value}", new { id = result.Value });
 });
 
 app.MapDelete("/products/{id:guid}", async (Guid id, ISender mediatr) =>

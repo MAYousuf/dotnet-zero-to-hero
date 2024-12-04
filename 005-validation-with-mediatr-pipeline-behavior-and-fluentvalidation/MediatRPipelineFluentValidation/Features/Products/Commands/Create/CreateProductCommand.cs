@@ -1,5 +1,4 @@
-﻿using Ardalis.Result;
-using MediatR;
+﻿using MediatR;
 
 namespace MediatRPipelineFluentValidation.Features.Products.Commands.Create;
 
