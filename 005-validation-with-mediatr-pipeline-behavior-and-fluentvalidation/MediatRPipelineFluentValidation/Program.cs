@@ -9,6 +9,7 @@ using MediatRPipelineFluentValidation.Features.Products.Queries.Get;
 using MediatRPipelineFluentValidation.Features.Products.Queries.List;
 using MediatRPipelineFluentValidation.Persistence;
 using System.Reflection;
+using Ardalis.Result;
 using Ardalis.Result.AspNetCore;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
@@ -23,7 +24,6 @@ builder.Services.AddMediatR(cfg =>
     cfg.RegisterServicesFromAssembly(Assembly.GetExecutingAssembly());
     //cfg.AddOpenBehavior(typeof(RequestResponseLoggingBehavior<,>));
     cfg.AddOpenBehavior(typeof(ValidationBehavior<,>));
-    
 });
 
 //builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
@@ -73,36 +73,41 @@ app.MapPost("/products", async (CreateProductCommand command, IMediator mediatr)
     var result = await mediatr.Send(command);
     if (!result.IsSuccess)
     {
-        return result.ToMinimalApiResult();
+        if (result.Status == ResultStatus.Invalid) //result.ToMinimalApiResult();
+            return Results.BadRequest(CreateProblemDetails("Validation Error", StatusCodes.Status400BadRequest,
+                CreateErrorsDictionary(result.ValidationErrors)));
 
-        // ProblemDetails CreateProblemDetails(
-        //     string title,
-        //     int status,
-        //     List<IReason> reasons) =>
-        //     new()
-        //     {
-        //         Title = title,
-        //         Status = status,
-        //         Type = string.Empty,
-        //         Detail = string.Empty,
-        //         Extensions = { { nameof(reasons), reasons } }
-        //     };
+        ProblemDetails CreateProblemDetails(
+            string title,
+            int status,
+            Dictionary<string, string[]> errors) =>
+            new()
+            {
+                Title = title,
+                Status = status,
+                Type = string.Empty,
+                Detail = string.Empty,
+                Extensions = { { nameof(errors), errors } }
+            };
+
+        Dictionary<string, string[]> CreateErrorsDictionary(IEnumerable<ValidationError> errors) =>
+            errors
+                // .SelectMany(x => x.Errors)
+                // .Where(x => x != null)
+                .GroupBy(
+                    x => x.Identifier,
+                    x => x.ErrorMessage,
+                    (propertyName, errorMessages) => new
+                    {
+                        Key = propertyName,
+                        Values = errorMessages.Distinct().ToArray()
+                    })
+                .ToDictionary(x => x.Key, x => x.Values);
     }
 
 
-    await mediatr.Publish(new ProductCreatedNotification(result.Value));
+    // await mediatr.Publish(new ProductCreatedNotification(result.Value));
     return Results.Created($"/products/{result.Value}", new { id = result.Value });
-
-    // result switch
-    // {
-    //     { IsSuccess: true } => throw new InvalidOperationException(),
-    //     _ => BadRequest(
-    //         CreateProblemDetails(
-    //             "Validation Error",
-    //             StatusCodes.Status400BadRequest,
-    //             result.Reasons))
-    // }
-
 });
 
 app.MapDelete("/products/{id:guid}", async (Guid id, ISender mediatr) =>
@@ -113,6 +118,3 @@ app.MapDelete("/products/{id:guid}", async (Guid id, ISender mediatr) =>
 
 app.UseHttpsRedirection();
 app.Run();
-
-  
-
